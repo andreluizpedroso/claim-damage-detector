@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Dataset baixado do Kaggle (grande demais para versionar)
+data/raw/
+
+# Pesos e checkpoints treinados
+models/
+outputs/
+
+.venv/
+venv/
+
+.claude/
