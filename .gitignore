@@ -13,3 +13,4 @@ outputs/
 venv/
 
 .claude/
+CLAUDE.md

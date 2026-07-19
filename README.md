@@ -1,4 +1,6 @@
-# Detecção de Danos em Sinistros com GAN + Deep Learning
+# Claim Damage Detector
+
+Detecção de danos em imagens de sinistros veiculares com Deep Learning + GAN.
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![TensorFlow](https://img.shields.io/badge/TensorFlow-2.15%2B-FF6F00?logo=tensorflow&logoColor=white)](https://www.tensorflow.org/)
@@ -98,14 +100,15 @@ baixado) e verificam formatos e faixas de normalização do pipeline de dados.
 - [`notebooks/01_exploratory_analysis.ipynb`](notebooks/01_exploratory_analysis.ipynb) — análise
   exploratória do dataset real: balanceamento de classes, dimensões/aspect ratio das imagens,
   brilho médio por classe e amostras visuais.
-- [`Fraude Detection Gan.ipynb`](<Fraude Detection Gan.ipynb>) — notebook interativo que chama o
-  código de `src/` para treino rápido e visualização (não é a forma recomendada de treinar; use os
-  scripts CLI abaixo para treino completo).
+- [`notebooks/02_modeling_demo.ipynb`](notebooks/02_modeling_demo.ipynb) — notebook interativo que
+  chama o código de `src/` para treino rápido e visualização (não é a forma recomendada de treinar;
+  use os scripts CLI abaixo para treino completo).
 
 ## 📂 Estrutura do projeto
 ```
 notebooks/
-└── 01_exploratory_analysis.ipynb   # EDA do dataset real
+├── 01_exploratory_analysis.ipynb   # EDA do dataset real
+└── 02_modeling_demo.ipynb          # demo interativa de treino/visualização
 src/
 ├── data.py              # download + pipeline tf.data (classificador e GAN)
 ├── gan.py                # DCGAN convolucional (gerador/discriminador)
