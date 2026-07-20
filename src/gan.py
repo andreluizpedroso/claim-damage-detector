@@ -57,9 +57,3 @@ def build_discriminator(image_shape: tuple[int, int, int] = IMAGE_SHAPE) -> kera
     ], name="discriminator")
     return model
 
-
-def build_gan(generator: keras.Model, discriminator: keras.Model, latent_dim: int = LATENT_DIM) -> keras.Model:
-    discriminator.trainable = False
-    gan_input = keras.Input(shape=(latent_dim,))
-    gan_output = discriminator(generator(gan_input))
-    return keras.Model(gan_input, gan_output, name="gan")

@@ -9,7 +9,7 @@ Detecção de danos em imagens de sinistros veiculares com Deep Learning + GAN.
 [![scikit--learn](https://img.shields.io/badge/scikit--learn-metrics-F7931E?logo=scikitlearn&logoColor=white)](https://scikit-learn.org/)
 [![Jupyter](https://img.shields.io/badge/Jupyter-notebooks-F37626?logo=jupyter&logoColor=white)](https://jupyter.org/)
 [![Kaggle Dataset](https://img.shields.io/badge/Kaggle-Car%20Damage%20Detection-20BEFF?logo=kaggle&logoColor=white)](https://www.kaggle.com/datasets/anujms/car-damage-detection)
-[![Tests](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)](tests/)
+[![Tests](https://github.com/andreluizpedroso/claim-damage-detector/actions/workflows/tests.yml/badge.svg)](https://github.com/andreluizpedroso/claim-damage-detector/actions/workflows/tests.yml)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 Projeto de visão computacional que treina um classificador real (transfer learning) para
@@ -74,15 +74,20 @@ Usa `class_weight` (com peso extra para a classe `00-damage`, já que deixar pas
 danificado como "íntegro" é o erro mais caro nesse caso de uso) e `EarlyStopping` com
 `restore_best_weights` para manter a melhor época, não a última. Ao final, imprime
 `precision`/`recall`/`f1` e a matriz de confusão no conjunto de validação, e salva o modelo em
-`models/classifier.keras`. Resultado de referência obtido com o dataset completo: ~84% de
-accuracy, 0.97 de precisão e 0.70 de recall na classe `00-damage`.
+`models/classifier.keras`. Use `--plots-dir docs/results` para salvar a matriz de confusão e as
+curvas de accuracy/loss como PNG. Resultado de referência obtido com o dataset completo: **94% de
+accuracy**, com precisão e recall de 0.94 em ambas as classes (veja [Resultados](#-resultados)).
 
 ### 3. (Opcional) Treinar a GAN para gerar imagens sintéticas
 ```bash
-python -m src.train_gan --epochs 50 --class-name 00-damage
+python -m src.train_gan --epochs 60 --class-name 00-damage
 ```
 Salva grades de imagens geradas em `outputs/samples/` a cada N épocas (útil para acompanhar
-visualmente a evolução do gerador) e os pesos em `models/generator.keras`.
+visualmente a evolução do gerador) e os pesos em `models/generator.keras`. O treino usa
+`tf.GradientTape` diretamente em vez do padrão clássico "modelo combinado gerador+discriminador
+com `discriminator.trainable = False`" — esse padrão quebra silenciosamente no Keras 3 (o
+discriminador compartilhado perde a capacidade de treinar sozinho), o que fazia o gerador
+"vencer" trivialmente contra um discriminador congelado em pesos aleatórios e gerar só ruído.
 
 ### 4. Classificar uma imagem
 ```bash
@@ -95,6 +100,34 @@ pytest tests/
 ```
 Os testes usam imagens sintéticas geradas em tempo de execução (não dependem do dataset real
 baixado) e verificam formatos e faixas de normalização do pipeline de dados.
+
+## 📈 Resultados
+
+Classificador (MobileNetV2, 25 épocas com `EarlyStopping`, dataset completo):
+
+| Métrica (validação) | 00-damage | 01-whole |
+|---|---|---|
+| Precisão | 0.94 | 0.94 |
+| Recall | 0.94 | 0.94 |
+| F1 | 0.94 | 0.94 |
+
+**Accuracy geral: 94%** (460 imagens de validação nunca vistas no treino).
+
+<table>
+<tr>
+<td><img src="docs/results/training_history.png" alt="Curvas de accuracy e loss por época" width="420"></td>
+<td><img src="docs/results/confusion_matrix.png" alt="Matriz de confusão" width="330"></td>
+</tr>
+</table>
+
+Imagens sintéticas geradas pela DCGAN (classe `00-damage`, 60 épocas em CPU):
+
+<img src="docs/results/gan_samples.png" alt="Grade de imagens geradas pela GAN" width="420">
+
+Ainda borradas e com artefato de "tabuleiro" (comum em `Conv2DTranspose`), mas já aprenderam
+paleta de cores e textura coerentes com fotos de carro/estrada — não é mais ruído puro. Mais
+épocas, um `Conv2DTranspose` maior ou upsampling + `Conv2D` (para reduzir o artefato de
+tabuleiro) melhorariam a nitidez.
 
 ## 📊 Notebooks
 - [`notebooks/01_exploratory_analysis.ipynb`](notebooks/01_exploratory_analysis.ipynb) — análise

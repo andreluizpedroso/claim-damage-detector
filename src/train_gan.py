@@ -13,7 +13,7 @@ import numpy as np
 import tensorflow as tf
 
 from src.data import load_gan_images
-from src.gan import LATENT_DIM, build_discriminator, build_gan, build_generator
+from src.gan import LATENT_DIM, build_discriminator, build_generator
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SAMPLES_DIR = PROJECT_ROOT / "outputs" / "samples"
@@ -43,33 +43,55 @@ def train(epochs: int, batch_size: int, class_name: str | None, sample_every: in
 
     generator = build_generator()
     discriminator = build_discriminator()
-    discriminator.compile(
-        optimizer=tf.keras.optimizers.Adam(1e-4, beta_1=0.5),
-        loss="binary_crossentropy",
-        metrics=["accuracy"],
-    )
-    gan = build_gan(generator, discriminator)
-    gan.compile(optimizer=tf.keras.optimizers.Adam(1e-4, beta_1=0.5), loss="binary_crossentropy")
+
+    d_optimizer = tf.keras.optimizers.Adam(1e-4, beta_1=0.5)
+    g_optimizer = tf.keras.optimizers.Adam(1e-4, beta_1=0.5)
+    bce = tf.keras.losses.BinaryCrossentropy()
 
     seed = tf.random.normal((16, LATENT_DIM))
+
+    # Loop manual com GradientTape em vez do padrão "gan = Model(discriminator(generator))"
+    # com discriminator.trainable = False: no Keras 3, alternar `.trainable` no mesmo
+    # objeto de discriminador compartilhado desativava também o treino standalone dele
+    # (warning "model does not have any trainable weights"), deixando o discriminador
+    # congelado em pesos aleatórios e o gerador "vencendo" trivialmente (g_loss -> 0,
+    # amostras viravam ruído puro). GradientTape aplica gradientes só nas variáveis
+    # certas em cada etapa, sem depender de toggles de estado.
+    @tf.function
+    def train_discriminator_step(real_batch):
+        batch_size_actual = tf.shape(real_batch)[0]
+        noise = tf.random.normal((batch_size_actual, LATENT_DIM))
+        fake_batch = generator(noise, training=True)
+
+        labels_real = tf.ones((batch_size_actual, 1)) * 0.9  # label smoothing
+        labels_fake = tf.zeros((batch_size_actual, 1))
+
+        with tf.GradientTape() as tape:
+            pred_real = discriminator(real_batch, training=True)
+            pred_fake = discriminator(fake_batch, training=True)
+            loss = 0.5 * (bce(labels_real, pred_real) + bce(labels_fake, pred_fake))
+        grads = tape.gradient(loss, discriminator.trainable_variables)
+        d_optimizer.apply_gradients(zip(grads, discriminator.trainable_variables))
+        return loss
+
+    @tf.function
+    def train_generator_step(batch_size_actual):
+        noise = tf.random.normal((batch_size_actual, LATENT_DIM))
+        labels_real = tf.ones((batch_size_actual, 1))
+
+        with tf.GradientTape() as tape:
+            fake_batch = generator(noise, training=True)
+            pred_fake = discriminator(fake_batch, training=False)
+            loss = bce(labels_real, pred_fake)
+        grads = tape.gradient(loss, generator.trainable_variables)
+        g_optimizer.apply_gradients(zip(grads, generator.trainable_variables))
+        return loss
 
     for epoch in range(1, epochs + 1):
         d_losses, g_losses = [], []
         for real_batch in dataset:
-            batch_size_actual = real_batch.shape[0]
-            noise = tf.random.normal((batch_size_actual, LATENT_DIM))
-            fake_batch = generator(noise, training=True)
-
-            labels_real = tf.ones((batch_size_actual, 1)) * 0.9  # label smoothing
-            labels_fake = tf.zeros((batch_size_actual, 1))
-
-            d_loss_real = discriminator.train_on_batch(real_batch, labels_real)
-            d_loss_fake = discriminator.train_on_batch(fake_batch, labels_fake)
-            d_losses.append(0.5 * (d_loss_real[0] + d_loss_fake[0]))
-
-            noise = tf.random.normal((batch_size_actual, LATENT_DIM))
-            g_loss = gan.train_on_batch(noise, tf.ones((batch_size_actual, 1)))
-            g_losses.append(g_loss)
+            d_losses.append(float(train_discriminator_step(real_batch)))
+            g_losses.append(float(train_generator_step(tf.shape(real_batch)[0])))
 
         print(f"epoch {epoch}/{epochs} - d_loss={np.mean(d_losses):.4f} g_loss={np.mean(g_losses):.4f}")
 
