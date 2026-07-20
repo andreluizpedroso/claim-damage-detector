@@ -23,12 +23,18 @@ CLASS_NAMES = ["00-damage", "01-whole"]
 
 
 def load_image(image_path: str) -> np.ndarray:
+    """Reproduz manualmente o mesmo pré-processamento do pipeline de treino
+    (src/data.py: resize + normalização [0,1]), já que aqui a imagem vem de
+    um arquivo avulso e não passa pelo `tf.data.Dataset`."""
     image = cv2.imread(image_path, cv2.IMREAD_COLOR)
     if image is None:
         raise FileNotFoundError(f"Não foi possível ler a imagem: {image_path}")
+    # OpenCV lê em BGR por padrão; o modelo foi treinado com imagens em RGB
+    # (via tf.keras.utils.image_dataset_from_directory), então é preciso converter.
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     image = cv2.resize(image, IMAGE_SIZE)
     image = image.astype("float32") / 255.0
+    # O modelo espera um batch (N, H, W, C); uma imagem sozinha vira um "batch de 1".
     return np.expand_dims(image, axis=0)
 
 
@@ -37,8 +43,14 @@ def predict(image_path: str, model: tf.keras.Model | None = None) -> tuple[str, 
         model = tf.keras.models.load_model(MODEL_PATH)
 
     image = load_image(image_path)
+    # A saída é um único neurônio sigmoid (índice [0][0] extrai o valor escalar
+    # do batch de 1 imagem): quanto mais perto de 1, mais "íntegro" segundo o modelo.
     probability = float(model.predict(image, verbose=0)[0][0])
 
+    # Threshold 0.5 é a escolha padrão/ingênua para decidir a classe a partir da
+    # probabilidade. Em produção, esse valor poderia ser ajustado (ex. exigir >0.7
+    # para "íntegro") para reduzir falsos negativos na classe de dano, que é o
+    # erro mais caro nesse caso de uso (veja DAMAGE_CLASS_BOOST em train_classifier.py).
     if probability < 0.5:
         label = "Suspeita de dano/fraude detectada"
     else:

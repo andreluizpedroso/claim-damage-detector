@@ -26,6 +26,16 @@ DAMAGE_CLASS_BOOST = 1.3
 
 
 def compute_class_weight(class_names: list[str]) -> dict[int, float]:
+    """Calcula um peso por classe para usar no `class_weight` do Keras.
+
+    A fórmula `total / (n_classes * contagem_da_classe)` é o balanceamento
+    "clássico" de scikit-learn/Keras: classes com menos exemplos recebem peso
+    maior, para que o erro do modelo nelas pese tanto quanto nas classes
+    maiores durante o treino (sem isso, um dataset desbalanceado tende a
+    fazer o modelo "preguiçosamente" favorecer a classe majoritária).
+    Depois, multiplicamos a classe de dano por DAMAGE_CLASS_BOOST -- um ajuste
+    de negócio por cima do balanceamento estatístico.
+    """
     counts = class_sample_counts(class_names=class_names)
     total = sum(counts.values())
     weights = {
@@ -39,10 +49,16 @@ def compute_class_weight(class_names: list[str]) -> dict[int, float]:
 
 
 def evaluate(model, val_ds, class_names: list[str], plots_dir: Path | None) -> None:
+    """Avalia no conjunto de validação (nunca visto durante o `model.fit`) e
+    imprime métricas por classe -- accuracy sozinha esconde desequilíbrios
+    (ex. um modelo que sempre prevê "íntegro" teria ~50% de accuracy num
+    dataset balanceado, mas recall 0 na classe de dano)."""
     y_true, y_pred = [], []
     for images, labels in val_ds:
         probs = model.predict(images, verbose=0).ravel()
         y_true.extend(labels.numpy().ravel().tolist())
+        # Mesmo threshold 0.5 usado em predict.py -- ver comentário lá sobre
+        # por que esse valor poderia ser ajustado em produção.
         y_pred.extend((probs >= 0.5).astype(int).tolist())
 
     print("\nRelatório de classificação (conjunto de validação):")
@@ -89,6 +105,14 @@ def train(epochs: int, batch_size: int, plots_dir: Path | None) -> None:
     print(f"Pesos de classe: {dict(zip(class_names, class_weight.values()))}")
 
     model = build_classifier()
+    # `restore_best_weights=True` é o detalhe mais importante aqui: sem ele,
+    # o Keras usaria os pesos da ÚLTIMA época treinada, mesmo que uma época
+    # anterior tivesse tido val_accuracy melhor (isso já aconteceu de fato
+    # numa rodada de treino deste projeto -- a época 4 tinha 77% de
+    # val_accuracy e a 15ª, salva por último, tinha caído para 71%).
+    # `patience=5` para o treino se val_accuracy não melhorar por 5 épocas
+    # seguidas, economizando tempo sem precisar adivinhar o número certo de
+    # épocas de antemão.
     early_stopping = keras.callbacks.EarlyStopping(
         monitor="val_accuracy", patience=5, restore_best_weights=True
     )
